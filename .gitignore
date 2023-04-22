@@ -1,5 +1,4 @@
 /OCRAutoModerator/config.py
 /venv
-/OCRAutoModerator/__pycache__
-__pycache__
+**/__pycache__/
 .idea
