@@ -64,23 +64,23 @@ class VideoManager:
             auto_remove = False
             for result in merged_result:
                 for rule_set in config:
-                    action_type = rule_set['type']
+                    action_type = rule_set['type'].strip()
+                    action = rule_set['action'].strip()
 
-                    if action_type == 'image':
+                    if action_type == 'image' or action == 'nothing':
                         continue
 
-                    action = rule_set['action']
                     rule = rule_set['rule']
                     action_reason = rule_set['action_reason']
                     priority = rule_set['priority']
 
                     for item in rule:
                         if item.lower() in result[0].lower().strip():
-                            if not auto_remove and action_type == 'remove':
+                            if not auto_remove and action == 'remove':
                                 auto_remove = True
-                            if action_type == 'remove':
+                            if action == 'remove':
                                 to_be_removed.append(ActionableItem(item, action, action_reason, priority))
-                            elif action_type == 'report':
+                            elif action == 'report':
                                 to_be_reported.append(ActionableItem(item, action, action_reason, priority))
 
         return sorted(to_be_removed, key=lambda actionable: actionable.priority), \

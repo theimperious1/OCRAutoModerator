@@ -24,10 +24,10 @@ class ImageManager:
 
         for result in merged_result:
             for rule_set in config:
-                action_type = rule_set['type']
-                action = rule_set['action']
+                action_type = rule_set['type'].strip()
+                action = rule_set['action'].strip()
 
-                if (action_type != 'any' and action_type != 'image') or action_type == 'nothing':
+                if (action_type != 'any' and action_type != 'image') or action == 'nothing':
                     continue
 
                 rule = rule_set['rule']
@@ -36,11 +36,11 @@ class ImageManager:
 
                 for item in rule:
                     if item.lower() in result[0].lower().strip():
-                        if not auto_remove and action.strip() == 'remove':
+                        if not auto_remove and action == 'remove':
                             auto_remove = True
-                        if action.strip() == 'remove':
+                        if action == 'remove':
                             to_be_removed.append(ActionableItem(item, action, action_reason, priority))
-                        elif action.strip() == 'report':
+                        elif action == 'report':
                             to_be_reported.append(ActionableItem(item, action, action_reason, priority))
 
         return sorted(to_be_removed, key=lambda actionable: actionable.priority), \
