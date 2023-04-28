@@ -43,10 +43,15 @@ class WikiParser:
 
     async def on_subreddit_join(self, msg) -> None:
         sub_name = msg.subreddit.display_name
-        sub = self.reddit.subreddit(sub_name)
+        subreddit = self.reddit.subreddit(sub_name)
         try:
-            if not await self.check_wiki_exists(sub):
-                self.wiki_configs[sub_name.lower()] = await self.create_wiki(sub)
+            if not await self.check_wiki_exists(subreddit):
+                self.wiki_configs[sub_name.lower()] = await self.create_wiki(subreddit)
+                self.reddit.subreddit(sub_name).message(
+                    f'{bot_name} has been setup correctly!', join_success.format(sub_name))
+                logger.info(f'Created Wiki Config for /r/{sub_name}')
+            else:
+                self.wiki_configs[sub_name.lower()] = await self.load_wiki_config(subreddit)
                 self.reddit.subreddit(sub_name).message(
                     f'{bot_name} has been setup correctly!', join_success.format(sub_name))
                 logger.info(f'Created Wiki Config for /r/{sub_name}')
@@ -69,8 +74,8 @@ class WikiParser:
                         logger.info(f'Wiki Update failed on /r/{sub_name}')
                 elif msg.subject == 'reset':
                     try:
-                        if not await self.check_wiki_exists(sub_name):
-                            self.wiki_configs[sub_name.lower()] = await self.create_wiki(sub_name)
+                        if not await self.check_wiki_exists(subreddit):
+                            self.wiki_configs[sub_name.lower()] = await self.create_wiki(subreddit)
                             self.reddit.subreddit(sub_name).message(
                                 f'{bot_name} has been setup correctly!', join_success.format(sub_name))
                             logger.info(f'Created Wiki Config for /r/{sub_name}')

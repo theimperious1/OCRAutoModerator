@@ -98,7 +98,7 @@ class BotClient:
                 await self.on_mod_removal(msg)
 
             elif msg.body is not None and msg.body.lower() \
-                    in self.wiki_configs and (msg.subject == 'update' or msg.subject == 'reset'):
+                    in self.wiki_configs and (msg.subject.lower() == 'update' or msg.subject.lower() == 'reset'):
                 await self.wiki_manager.on_wiki_update_request(msg)
 
             msg.mark_read()
@@ -177,7 +177,7 @@ class BotClient:
 
                 elif should_report:
                     submission.report(
-                        f'This image appears to violate the rules. It matched {len(to_be_reported)} times.')
+                        f'This content appears to violate the rules. It matched {len(to_be_reported)} times.')
                     logger.info(
                         f'Submission {submission.id} on /r/{subreddit.display_name} triggered {len(to_be_reported)} matches.')
                 else:
