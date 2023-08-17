@@ -9,14 +9,14 @@ import logging
 # import signal
 import sys
 import traceback
-from OCRAutoModerator.ImageReader import ImageReaderTesseract
+from OCRAutoModerator.image_reader import ImageReaderTesseract
 import praw
 from OCRAutoModerator.managers.wiki_manager import WikiParser
-from OCRAutoModerator.config import *
+from OCRAutoModerator.config.config import *
 from OCRAutoModerator.managers.db_manager import get_viewed_submissions, insert_submission
-from OCRAutoModerator.managers.content_managers.image_manager import ImageManager
-from OCRAutoModerator.managers.content_managers.video_manager import VideoManager
+from OCRAutoModerator.managers.submission_manager import SubmissionManager
 from OCRAutoModerator.utils import fetch_media, is_video_or_gif
+from html import unescape
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -51,9 +51,8 @@ class BotClient:
         self.wiki_configs = {}
         self.wiki_manager = WikiParser(self.reddit, self.wiki_configs)
         self.ir = ImageReaderTesseract()
+        self.submission_manager = SubmissionManager(self.reddit, self.ir)
         self.viewed_submissions = None
-        self.image_manager = ImageManager(self.reddit, self.ir)
-        self.video_manager = VideoManager(self.reddit, self.ir)
         self.sub_list = self.reddit.redditor(reddit_name).moderated()
         logger.info(f'Successfully loaded! {bot_name} is active...')
 
@@ -63,7 +62,13 @@ class BotClient:
             try:
                 self.wiki_configs[subreddit.display_name.lower()] = await self.wiki_manager.load_wiki_config(subreddit)
             except:
+                traceback.print_exc()
                 self.wiki_configs[subreddit.display_name.lower()] = self.wiki_manager.parse(default_wiki)
+                # Maybe worth mod mailing the sub? Then again, this only happens on restarts, and I would be notified instantly.
+                # However... the very fact it would happen means that mod team did not send the update msg to the bot. Possibly need educating.
+                # self.reddit.redditor(developers[0]).message(
+                #    f'{bot_name} has an error in load_data for /r/{subreddit.display_name}', 'Please check on it.'
+                # )
 
     def run(self) -> None:
         async def runner():
@@ -127,9 +132,12 @@ class BotClient:
         )
 
     async def do_submissions(self) -> None:
-        for submission in self.reddit.subreddit('mod').new():
+        for submission in self.reddit.subreddit('mod' if not test_mode else 'Approval_Bot').new():
             subreddit = submission.subreddit
-            if submission.id in self.viewed_submissions or not hasattr(submission, 'url_overridden_by_dest'):
+            media_url = submission.url_overridden_by_dest if hasattr(submission, 'url_overridden_by_dest') else None
+            if submission.id in self.viewed_submissions:
+                #  or \
+                #                     (not hasattr(submission, 'url_overridden_by_dest') and not hasattr(submission, 'media_metadata'))
                 continue
 
             elif submission.id not in self.viewed_submissions:
@@ -141,47 +149,38 @@ class BotClient:
                 continue
 
             logger.info(f'Scanning {submission.id} by /u/{submission.author} on /r/{subreddit.display_name}')
-
             try:
-                if media := fetch_media(submission.url):
-                    to_be_removed, to_be_reported = \
-                        self.image_manager.check_image(
-                            submission.url, media, self.wiki_configs[subreddit.display_name.lower()]
-                        )
+                # If the content is an image
+                if media := fetch_media(media_url) or hasattr(submission, 'media_metadata'):
+                    if media:
+                        match_sets = \
+                            await self.submission_manager.check_image(
+                                submission, media, self.wiki_configs[subreddit.display_name.lower()]
+                            )
+                    else:
+                        media = set()
+                        metadata = submission.media_metadata
+                        # e = media type, s = the highest resolution link
+                        [
+                            media.add((unescape(metadata[key]['s']), metadata[key]['e']))
+                            for key in metadata if metadata[key]['status'] == 'valid'
+                        ]
+                        match_sets = await self.submission_manager.check_multi_media(
+                            submission, media, self.wiki_configs[subreddit.display_name.lower()])
 
                 elif is_video_or_gif(submission):
-                    to_be_removed, to_be_reported = self.video_manager.check_video(
+                    match_sets = self.submission_manager.check_video(
                         submission, self.wiki_configs[subreddit.display_name.lower()]
                     )
 
                 else:
-                    continue
+                    match_sets = await self.submission_manager.check_text(
+                        submission,
+                        self.wiki_configs[subreddit.display_name.lower()])
 
-                should_remove = len(to_be_removed) > 0
-                should_report = len(to_be_reported) > 0
-                if not should_remove and not should_report:
-                    continue
-
-                if should_remove:
-                    try:
-                        submission.mod.remove(mod_note=to_be_removed[0].action_reason)
-                        reply = submission.reply(
-                            body=f"Sorry, your submission appears to violate our rules and has been removed.")
-                        reply.mod.distinguish(how='yes')
-                        logger.info(
-                            f'Submission {submission.id} on /r/{subreddit.display_name} was removed and triggered {len(to_be_removed)} matches.')
-                    except:
-                        logger.info(
-                            f'ERROR: Submission {submission.id} on /r/{subreddit.display_name} was NOT removed and triggered {len(to_be_removed)} matches.')
-                        traceback.print_exc()
-
-                elif should_report:
-                    submission.report(
-                        f'This content appears to violate the rules. It matched {len(to_be_reported)} times.')
-                    logger.info(
-                        f'Submission {submission.id} on /r/{subreddit.display_name} triggered {len(to_be_reported)} matches.')
-                else:
-                    pass
+                await self.submission_manager.do_submission(submission, match_sets)
+                logger.info(
+                    f'Scanning complete for {submission.id} by /u/{submission.author} on /r/{subreddit.display_name}')
             except:
                 traceback.print_exc()
 

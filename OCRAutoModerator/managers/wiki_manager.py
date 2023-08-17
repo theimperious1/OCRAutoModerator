@@ -8,9 +8,13 @@ https://www.reddit.com/user/theimperious1
 import logging
 import re
 from collections import namedtuple
+from typing import Union
+from enum import IntEnum
 import yaml
 from praw.models import Subreddit
-from OCRAutoModerator.config import default_wiki, bot_name, join_success, wiki_permissions_error, developers
+from OCRAutoModerator.config.config import default_wiki, bot_name, join_success, wiki_permissions_error, developers, \
+    acceptable_languages_easyocr, acceptable_languages_pytesseract, language_map_pytes_to_easyocr, \
+    language_map_easyocr_to_pytes
 from OCRAutoModerator.utils import is_user_mod
 from OCRAutoModerator.utils import log_and_reply
 
@@ -32,6 +36,11 @@ _match_modifiers = set(_match_regexes.keys()) | {
     "case-sensitive",
     "regex",
 }
+
+
+class OperatorTypes(IntEnum):
+    STANDARD = 1
+    TIME = 2
 
 
 # noinspection PyBroadException
@@ -99,6 +108,11 @@ class WikiParser:
 
     @staticmethod
     def parse(config: str) -> list:
+        """
+        AutoModerator within OCRAutoModerator.... AutoModerator inception! If you know, you know... ;)
+        Author: Reddit Inc.
+        Edits: rule_defs and related code. I did not need the extra data but left the code in case I do later.
+        """
         rule_defs = []
         yaml_sections = [section.strip('\r\n')
                          for section in re.split('^---', config, flags=re.MULTILINE)]
@@ -117,31 +131,185 @@ class WikiParser:
 
         return rule_defs
 
-    @staticmethod
-    def validate_config(config) -> bool:
+    def validate_config(self, config: list) -> bool:
         priorities = []
         for section in config:
             if 'type' not in section:
-                raise ValueError("'type' parameter is missing")
+                raise ValueError("'type' parameter is missing.")
             elif 'rule' not in section:
-                raise ValueError("'rule' parameter is missing")
+                raise ValueError("'rule' parameter is missing.")
             elif 'action' not in section:
-                raise ValueError("'action' parameter is missing")
+                raise ValueError("'action' parameter is missing.")
             elif 'action_reason' not in section:
-                raise ValueError("'action_reason' parameter is missing")
+                raise ValueError("'action_reason' parameter is missing.")
             elif 'priority' not in section:
-                raise ValueError("'priority' parameter is missing")
+                raise ValueError("'priority' parameter is missing.")
 
             if type(section['type']) is not str:
-                raise TypeError("'type' parameter is not a string/text e.g \"any\"")
+                raise TypeError("'type' parameter is not a string/text, e.g \"any\".")
             elif type(section['rule']) is not list:
-                raise TypeError("'rule' parameter is a list e.g [\"example\", \"example\"]")
+                raise TypeError("'rule' parameter is a list, e.g [\"example\", \"example\"].")
             elif type(section['action']) is not str:
-                raise TypeError("'action' parameter is not a string/text e.g \"report\"")
+                raise TypeError("'action' parameter is not a string/text, e.g \"report\".")
             elif type(section['action_reason']) is not str:
-                raise TypeError("'action_reason' parameter is not a string/text e.g \"No Profanity\"")
+                raise TypeError("'action_reason' parameter is not a string/text, e.g \"No Profanity\".")
             elif type(section['priority']) is not int:
-                raise TypeError("'priority' parameter is not a number e.g 1")
+                raise TypeError("'priority' parameter is not a number, e.g 1.")
+            elif 'flair_text' in section and type(section['flair_text']) is not str:
+                raise TypeError("'flair_text' parameter is not a string/text.")
+            elif 'flair_css_class' in section and type(section['flair_css_class']) is not str:
+                raise TypeError("'flair_css_class' parameter is not a string/text.")
+            elif 'flair_template_id' in section and type(section['flair_template_id']) is not str:
+                raise TypeError(
+                    "'flair_template_id' parameter is not a string/text. You can find this value on https://www.reddit.com/r/YOUR_SUBREDDIT/about/postflair, click Copy ID.")
+            elif 'set_flair' in section and type(section['set_flair']) is not str:
+                raise TypeError("'set_flair' parameter is not a string/text.")
+            elif 'overwrite_flair' in section and type(section['overwrite_flair']) is not bool:
+                raise TypeError("'overwrite_flair' parameter is not a boolean value, e.g true or false.")
+            elif 'comment' in section and type(section['comment']) is not str:
+                raise TypeError("'comment_locked' parameter is not a string/text.")
+            elif 'comment_stickied' in section and type(section['comment_stickied']) is not bool:
+                raise TypeError("'comment_stickied' parameter is not a boolean value, e.g true or false.")
+            elif 'comment_locked' in section and type(section['comment_locked']) is not bool:
+                raise TypeError("'comment_locked' parameter is not a boolean value, e.g true or false.")
+            elif 'moderators_exempt' in section and type(section['moderators_exempt']) is not bool:
+                raise TypeError("'moderators_exempt' parameter is not a boolean value, e.g true or false.")
+            elif 'report_reason' in section and type(section['report_reason']) is not str:
+                raise TypeError("'report_reason' parameter is not a string/text.")
+            elif 'standard' in section and type(section['standard']) is not str:
+                raise TypeError(
+                    "'standard' parameter is not a string/text. Options for standards can be found on https://www.reddit.com/wiki/automoderator/standard-conditions/")
+            elif 'set_locked' in section and type(section['set_locked']) is not bool:
+                raise TypeError("'set_locked' parameter is not a boolean value, e.g true or false.")
+            elif 'is_original_content' in section and type(section['is_original_content']) is not bool:
+                raise TypeError("'is_original_content' parameter is not a boolean value, e.g true or false.")
+            elif 'is_self' in section and type(section['is_self']) is not bool:
+                raise TypeError("'is_self' parameter is not a boolean value, e.g true or false.")
+            elif 'is_nsfw' in section and type(section['is_nsfw']) is not bool:
+                raise TypeError("'is_nsfw' parameter is not a boolean value, e.g true or false.")
+            elif 'set_sticky' in section and type(section['set_sticky']) is not bool:
+                raise TypeError("'set_sticky' parameter is not a boolean value, e.g true or false.")
+            elif 'set_nsfw' in section and type(section['set_nsfw']) is not bool:
+                raise TypeError("'set_nsfw' parameter is not a boolean value, e.g true or false.")
+            elif 'set_spoiler' in section and type(section['set_spoiler']) is not bool:
+                raise TypeError("'set_spoiler' parameter is not a boolean value, e.g true or false.")
+            elif 'set_contest_mode' in section and type(section['set_contest_mode']) is not bool:
+                raise TypeError("'set_contest_mode' parameter is not a boolean value, e.g true or false.")
+            elif 'set_original_content' in section and type(section['set_original_content']) is not bool:
+                raise TypeError("'set_original_content' parameter is not a boolean value, e.g true or false.")
+            elif 'set_suggested_sort' in section and type(section['set_suggested_sort']) is not str:
+                raise TypeError("'set_suggested_sort' parameter is not a string/text.")
+            elif 'ignore_reports' in section and type(section['ignore_reports']) is not bool:
+                raise TypeError("'ignore_reports' parameter is not a boolean value, e.g true or false.")
+            elif 'satisfy_any_threshold' in section and type(section['satisfy_any_threshold']) is not bool:
+                raise TypeError("'satisfy_any_threshold' parameter is not a boolean value, e.g true or false.")
+            elif 'has_comments' in section:
+                section['has_comments'] = self.assign_operators(section['has_comments'])
+            elif 'author' in section:
+                if type(section['author']) is not dict:
+                    raise TypeError(
+                        "'author' parameter is not a dictionary/group value, please refer to https://www.reddit.com/wiki/automoderator/full-documentation/ for how to do this.")
+                author = section['author']
+                if 'satisfy_any_threshold' in author and type(author['satisfy_any_threshold']) is not bool:
+                    raise TypeError("'satisfy_any_threshold' parameter is not a boolean value, e.g true or false.")
+                elif 'has_verified_email' in author and type(author['has_verified_email']) is not bool:
+                    raise TypeError("'has_verified_email' parameter is not a boolean value, e.g true or false.")
+                elif 'is_mod' in author and type(author['is_mod']) is not bool:
+                    raise TypeError("'is_mod' parameter is not a boolean value, e.g true or false.")
+                elif 'is_gold' in author and type(author['is_gold']) is not bool:
+                    raise TypeError("'is_gold' parameter is not a boolean value, e.g true or false.")
+                elif 'is_suspended' in author and type(author['is_suspended']) is not bool:
+                    raise TypeError("'is_suspended' parameter is not a boolean value, e.g true or false.")
+                elif 'is_nsfw' in author and type(author['is_nsfw']) is not bool:
+                    raise TypeError("'is_nsfw' parameter is not a boolean value, e.g true or false.")
+
+                if 'post_karma' in author:
+                    author['post_karma'] = self.assign_operators(author['post_karma'])
+
+                if 'comment_karma' in author:
+                    author['comment_karma'] = self.assign_operators(author['comment_karma'])
+
+                if 'account_age' in author:
+                    author['account_age'] = self.assign_operators(author['account_age'], OperatorTypes.TIME)
+                    # TODO: Finish TIME Operator Assignments
+
+                if 'description_contains' in author:
+                    self.validate_conditionals(author['description_contains'], 'description_contains')
+
+                if 'has_followers' in author:
+                    section['author']['has_followers'] = self.assign_operators(author['has_followers'])
+
+                if 'mod_notes' in author:
+                    if type(author['mod_notes']) is not dict:
+                        raise TypeError(
+                            "'mod_notes' parameter is not a dictionary/group value, please refer to https://www.reddit.com/wiki/automoderator/full-documentation/ for how to do this.")
+
+                    if 'contains' not in author['mod_notes']:
+                        raise ValueError(
+                            "'mod_notes' is a dictionary/group value and *must contain* a parameter called 'contains' with the value being a list or str.")
+
+                    self.validate_conditionals(author['mod_notes']['contains'], 'contains')
+
+                    if 'satisfy_any_threshold' in author['mod_notes'] \
+                            and type(author['mod_notes']['satisfy_any_threshold']) is not bool:
+                        raise TypeError("'satisfy_any_threshold' is not a boolean value, e.g true or false.")
+
+                if 'has_trophies' in author:
+                    section['author']['has_trophies'] = self.assign_operators(author['has_trophies'])
+
+                if 'has_submissions' in author:
+                    # TODO: Implement has_submissions
+                    author['has_submissions'] = self.assign_operators(author['has_submissions'])
+
+                if 'has_comments' in author:
+                    # TODO: Implement has_comments
+                    author['has_comments'] = self.assign_operators(author['has_comments'])
+
+                if 'links' in author:
+                    if type(author['links']) is not list and type(author['links']) is not str:
+                        raise TypeError(
+                            "'links' parameter is a list of strings, e.g [\"example\", \"example\"], or a string e.g \"Example\"")
+
+                    if 'satisfy_any_threshold' in author['links'] \
+                            and type(author['links']['satisfy_any_threshold']) is not bool:
+                        raise TypeError("'satisfy_any_threshold' is not a boolean value, e.g true or false.")
+
+            if section['action'] not in ('report', 'remove', 'spam', 'approve', 'nothing'):
+                raise ValueError("'action' must be either 'report', 'remove', 'spam', 'approve', or 'nothing'")
+
+            if len(section['action_reason']) > 99:
+                raise ValueError(
+                    "'action_reason' cannot contain more than 99 characters. This value does not change the removal comment.")
+
+            if 'flair_text' in section and len(section['flair_text']) > 99:
+                raise ValueError("'flair_text' cannot contain more than 99 characters.")
+
+            if 'flair_css_class' in section and len(section['flair_css_class']) > 99:
+                raise ValueError("'flair_css_class' cannot contain more than 99 characters.")
+
+            if 'flair_template_id' in section and len(section['flair_template_id']) != 36:
+                raise ValueError(
+                    "'flair_template_id' will never be above or below 36 characters. You can find this value on https://www.reddit.com/r/YOUR_SUBREDDIT/about/postflair, click Copy ID.")
+
+            if 'set_flair' in section and len(section['set_flair']) != 36:
+                raise ValueError("'set_flair' accepts a flair_template_id which should always be 36 chars long.")
+
+            if 'comment' in section:
+                if len(section['comment']) >= 9999:
+                    raise ValueError("'comment' length can be no greater than 9,999 characters.")
+
+                section['comment'] = section['comment'].replace('\n', '  ')
+
+            if 'comment_stickied' in section:
+                section['comment_stickied'] = 'yes' if section['comment_stickied'] else 'no'
+
+            if 'report_reason' in section and len(section['report_reason']) > 99:
+                raise ValueError("'report_reason' cannot contain more than 99 characters.")
+
+            if 'set_suggested_sort' in section and section['set_suggested_sort'].lower() \
+                    not in ('best', 'top', 'new', 'controversial', 'old', 'qa'):
+                raise ValueError(
+                    "'set_suggested_sort' parameter must be one of 'best', 'top', 'new', 'controversial', 'old', or 'qa'")
 
             priority = section['priority']
             if priority < 1 or priority > 2000:
@@ -160,11 +328,89 @@ class WikiParser:
 
             priorities.append(section['priority'])
 
+            if 'language' in section:
+                lang = section['language']
+                if lang not in acceptable_languages_easyocr and lang not in acceptable_languages_pytesseract:
+                    raise ValueError(
+                        f'The language code you provided is not valid or not supported. These are the supported language codes: {set(acceptable_languages_easyocr + acceptable_languages_pytesseract)}.  \n '
+                        f'Please note that OCR AutoMod uses multiple OCR libraries and by using a non english language, '
+                        f'you may not be able to utilize all of them. This may result in OCR AutoMod finding less matches and or having worse accuracy.')
+
+                if lang in language_map_easyocr_to_pytes:
+                    section['lang_easyocr'] = lang
+                    section['lang_pytes'] = language_map_easyocr_to_pytes[lang]
+                elif lang in language_map_pytes_to_easyocr:
+                    section['lang_pytes'] = lang
+                    section['lang_easyocr'] = language_map_pytes_to_easyocr[lang]
+                elif lang not in acceptable_languages_easyocr or lang not in acceptable_languages_pytesseract:
+                    if lang not in acceptable_languages_pytesseract:
+                        section['lang_pytes'] = 'INVALID'
+                    elif lang not in acceptable_languages_easyocr:
+                        section['lang_easyocr'] = 'INVALID'
+
+                else:
+                    section['lang_easyocr'] = 'en'
+                    section['lang_pytes'] = 'eng'
+            else:
+                section['lang_easyocr'] = 'en'
+                section['lang_pytes'] = 'eng'
+
         duplicates = [priority for priority in priorities if priorities.count(priority) > 1]
         if len(duplicates) > 0:
             raise ValueError("More than one rule has the same priority as another. Priority must be unique.")
 
         return True
+
+    @staticmethod
+    def validate_conditionals(conditional: Union[str, list], conditional_name: str) -> bool:
+        conditional_type = type(conditional)
+        if conditional_type is not str and conditional_type is not list:
+            raise TypeError(
+                "'{conditional_name}' parameter is not a string/text value or list value, e.g \"example\" or [\"example1\", \"example2\"].")
+        elif conditional_type is list:
+            if not all(isinstance(x, str) for x in conditional):
+                raise ValueError(
+                    f"'{conditional_name}' must be either a string/text or a list of strings/text. e.g abc or [\"abc\", \"defg\"]")
+
+        return True
+
+    @staticmethod
+    def assign_operators(rule_text: str, operator_type: OperatorTypes = OperatorTypes.STANDARD) -> list:
+        operator_set = rule_text.split(' ')
+        if operator_type == OperatorTypes.STANDARD:
+            try:
+                int(operator_set[1])
+            except:
+                raise TypeError('The second part of your conditional is not a number. e.g "> 80".')
+            if len(operator_set) != 2 or operator_set[0] not in ('>=', '<=', '>', '<'):
+                raise ValueError(
+                    "Conditionals must start with either '>', '>=', '<', '<=' followed by a single space and the desired number. Don't include quotes.")
+
+            # noinspection PyTypeChecker
+            operator_set[1] = int(operator_set[1])
+            return operator_set
+
+        elif operator_type == OperatorTypes.TIME:
+            if len(operator_set) != 3:
+                if operator_set[0] not in ('>=', '<=', '>', '<'):
+                    raise ValueError(
+                        "Time conditionals must start with either '>', '>=', '<', '<=' followed by a single space and the desired number. Don't include quotes.")
+                elif operator_set[2] not in ('minutes', 'hours', 'days', 'weeks', 'months', 'years'):
+                    raise ValueError(
+                        "Time conditionals must end with either 'minutes', 'hours', 'days', 'weeks', 'months', or 'years'. ex: >= 7 hours")
+                elif type(operator_set[1]) is not int:
+                    raise TypeError('The second part of your time conditional is not a number. e.g "> 60 minutes".')
+                else:
+                    try:
+                        int(operator_set[1])
+                    except:
+                        raise TypeError('The second part of your conditional is not a number. e.g "> 80".')
+
+            # noinspection PyTypeChecker
+            operator_set[1] = int(operator_set[1])
+            return operator_set
+
+        return []
 
     @staticmethod
     async def check_wiki_exists(subreddit: Subreddit) -> bool:

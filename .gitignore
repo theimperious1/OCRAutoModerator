@@ -1,4 +1,7 @@
-/OCRAutoModerator/config.py
+/OCRAutoModerator/config/config.py
+/ocrautomoderator.log
 /venv
 **/__pycache__/
 .idea
+/OCRAutoModerator/database/database.db
+/OCRAutoModerator/database/*

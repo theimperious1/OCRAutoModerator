@@ -8,10 +8,11 @@ https://www.reddit.com/user/theimperious1
 from pytube import YouTube
 import logging
 import traceback
+from praw.models import Submission
 
 
 # noinspection PyBroadException
-def download_yt_video(submission, url, file_name):
+def download_yt_video(submission: Submission, url: str, file_name: str) -> bool:
     try:
         logging.info(f'YouTube Video URL: {url}')
         YouTube(url).streams.first().download('videos/', filename=file_name, timeout=60, max_retries=2)

@@ -1,0 +1,6 @@
+Once we have default filters, add the ability for a subreddit to enable the bot on it by dming it "activate"/"deactivate" as subject and "subredditsname: politics, profanity, etc" as body.
+The point being the ability to run the bot with no configuration or moderation permissions, all via DM.
+
+
+Repost optimization. If we hash out each image/video as they come and link them to the rule they triggered on,
+we could effectively choose to auto action said content via quick queries rather than OCR processing.
